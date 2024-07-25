@@ -1,0 +1,25 @@
+{% load sekizai_tags l10n %}
+{% localize off %} {# avoid decimal comma #}
+
+{% addtoblock "js" strip %}
+<script>
+    ready(function () {
+      {% for mark in marks %}
+        L.marker([{{ mark.lat }}, {{ mark.long }}]).addTo(map)
+            .bindPopup('{{ mark.name }}');
+      {% endfor %}
+    })
+</script>
+{% endaddtoblock %}
+
+<table class="table">
+        <tbody>
+     {% for mark in marks %}
+    <tr>
+        <td>{{mark.name}}</td> <td>{{mark.lat}}</td><td>{{mark.long}}</td><td>{{mark.content|safe}}</td>
+    </tr>
+       {% endfor %}
+        </tbody>
+</table>
+
+{% endlocalize %}

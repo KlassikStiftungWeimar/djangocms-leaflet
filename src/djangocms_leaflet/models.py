@@ -50,8 +50,12 @@ class Geocode(CMSPlugin):
                 'q': self.location_search_term,
                 'format': 'jsonv2'
             }
+
+            headers = {
+                'User-Agent': 'KSW app',
+            }
             response: requests.Response = requests.get(
-                'https://nominatim.openstreetmap.org/search', params=payload
+                'https://nominatim.openstreetmap.org/search', params=payload, headers=headers
             )
             geo_json: list[dict[str, any]] = response.json()
             try:
@@ -91,3 +95,57 @@ class Marker(Geocode):
             self.name if self.name else self.location_search_term if
             self.location_search_term else f'{self.latitude}° {self.longitude}°'
         )
+
+class ListOfMarkers(CMSPlugin):
+    """Marker that can be added to a map"""
+    name = models.CharField(verbose_name=_('name'), blank=True, max_length=100)
+    markers_txt = models.TextField(blank=True,null=True,help_text="lat, long [, name] (csv-Format) or only names")
+    markers_json = models.JSONField(blank=True,null=True,help_text="markers as JSON (alternativ to markers_txt, preferred)")
+
+    def clean(self):
+        if not self.markers_json: #wenn leer dann fülle mit txt
+            entries = []
+            for line in self.markers_txt.split("\n"):
+                entry = {}
+                line = line.replace("\n","")
+                splitted = line.split(",")
+                if len(splitted) > 1 and isfloat(splitted[0]): #assume lat,long,...
+                    try:
+                        entry["lat"] = float(splitted[0])
+                        entry["long"] = float(splitted[1])
+                    except ValueError:
+                        raise ValidationError(f"line: {line} contains other values than floats for lat or long!")
+                    if len(splitted) > 2:
+                        entry["name"] = splitted[2]
+                    if len(splitted) > 3:
+                        entry["content"] = splitted[3]
+                else:
+                    payload: dict[str, str] = {
+                        'q': splitted[0],
+                        'format': 'jsonv2'
+                    }
+                    response: requests.Response = requests.get(
+                        'https://nominatim.openstreetmap.org/search', params=payload
+                    )
+                    geo_json: list[dict[str, any]] = response.json()
+                    try:
+                        entry["lat"] = geo_json[0]['lat']
+                        entry["long"] = geo_json[0]['lon']
+                        entry["name"] = splitted[0]
+                        if len(splitted)>1:
+                            entry["content"] = splitted[1]
+                    except IndexError:
+                        raise ValidationError(_('Location not found.') + f"{splitted[0]}")
+                entries.append(entry)
+            self.markers_json = entries
+
+    def __str__(self) -> str:
+        return self.name
+
+
+def isfloat(x):
+    try:
+        float(x)
+        return True
+    except:
+        return False
